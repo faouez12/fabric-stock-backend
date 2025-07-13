@@ -14,7 +14,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ✅ Add article to stockage
+// ✅ Add article to stockage (MODIFIED)
 router.post("/", async (req, res) => {
   try {
     const {
@@ -28,6 +28,16 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
+    // Check if article already exists with same code + emplacement
+    const existingArticle = await Article.findOne({ codeArticle, emplacement });
+
+    if (existingArticle) {
+      existingArticle.quantiteEntree += 1;
+      await existingArticle.save();
+      return res.status(200).json(existingArticle);
+    }
+
+    // Otherwise, create a new article
     const qrCodeDataURL = await QRCode.toDataURL(codeArticle + emplacement);
 
     const article = new Article({
