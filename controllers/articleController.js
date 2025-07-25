@@ -43,26 +43,55 @@ exports.addArticle = async (req, res) => {
 };
 
 exports.destockArticle = async (req, res) => {
-  const { id } = req.params;
+  const { codeArticle, emplacementActuel, nouvelEmplacement } = req.body;
+
+  if (!codeArticle || !emplacementActuel || !nouvelEmplacement) {
+    return res.status(400).json({ error: "Missing fields" });
+  }
 
   try {
-    const article = await Article.findById(id);
-    if (!article) return res.status(404).json({ error: "Article not found" });
+    // 1. Find the source article (stockage)
+    const sourceArticle = await Article.findOne({
+      codeArticle,
+      emplacement: emplacementActuel,
+    });
 
-    article.quantiteRestante -= 1;
-
-    if (article.quantiteRestante <= 0) {
-      await Article.findByIdAndDelete(id);
-      return res
-        .status(200)
-        .json({ message: "Article fully destocked and removed." });
+    if (!sourceArticle) {
+      return res.status(404).json({ error: "Article not found in stockage" });
     }
 
-    await article.save();
-    res.json(article);
+    // 2. Decrease quantity or delete
+    sourceArticle.quantiteRestante -= 1;
+    if (sourceArticle.quantiteRestante <= 0) {
+      await sourceArticle.deleteOne();
+    } else {
+      await sourceArticle.save();
+    }
+
+    // 3. Add or update destination article (déstockage)
+    const destArticle = await Article.findOne({
+      codeArticle,
+      emplacement: nouvelEmplacement,
+    });
+
+    if (destArticle) {
+      destArticle.quantiteEntree += 1;
+      destArticle.quantiteRestante += 1;
+      await destArticle.save();
+    } else {
+      const newDest = new Article({
+        codeArticle,
+        emplacement: nouvelEmplacement,
+        quantiteEntree: 1,
+        quantiteRestante: 1,
+      });
+      await newDest.save();
+    }
+
+    res.status(200).json({ message: "Déstockage effectué avec succès." });
   } catch (err) {
-    console.error("Destock error:", err);
-    res.status(500).json({ error: "Destock failed" });
+    console.error("Erreur déstockage:", err);
+    res.status(500).json({ error: "Erreur serveur déstockage" });
   }
 };
 

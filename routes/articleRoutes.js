@@ -67,31 +67,39 @@ router.post("/destock", async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // Step 1: Remove 1 from stockage (delete one entry)
-    const removed = await Article.findOneAndDelete({
+    // Step 1: Find article in stockage
+    const stockArticle = await Article.findOne({
       codeArticle,
       emplacement: emplacementStock,
     });
 
-    if (!removed) {
+    if (!stockArticle) {
       return res
         .status(404)
-        .json({ error: "No article found in stockage to remove" });
+        .json({ error: "No article found in stockage to move" });
     }
 
-    // Step 2: Check if article already exists in destockage
-    const existing = await Article.findOne({
+    // Decrease stock quantity
+    stockArticle.quantiteEntree -= 1;
+    if (stockArticle.quantiteEntree <= 0) {
+      await stockArticle.deleteOne();
+    } else {
+      await stockArticle.save();
+    }
+
+    // Step 2: Update destockage side
+    const destArticle = await Article.findOne({
       codeArticle,
       emplacement: emplacementDestock,
     });
 
-    if (existing) {
-      existing.quantiteEntree += 1;
-      await existing.save();
-      return res.status(200).json(existing);
+    if (destArticle) {
+      destArticle.quantiteEntree += 1;
+      await destArticle.save();
+      return res.status(200).json(destArticle);
     }
 
-    // Step 3: If not exist, create new destockage article
+    // Step 3: If not exist, create new one
     const qrCodeDataURL = await QRCode.toDataURL(
       codeArticle + emplacementDestock
     );
@@ -99,7 +107,6 @@ router.post("/destock", async (req, res) => {
     const newArticle = new Article({
       codeArticle,
       emplacement: emplacementDestock,
-      emplacementStock,
       quantiteEntree: 1,
       quantiteSortie: 0,
       dateEntree: new Date(),

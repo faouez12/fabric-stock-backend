@@ -1,3 +1,4 @@
+const Article = require("../models/articleModel");
 const ArticleList = require("../models/ArticleList");
 
 // 🟢 GET all article types
